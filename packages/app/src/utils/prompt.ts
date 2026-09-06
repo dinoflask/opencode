@@ -230,7 +230,6 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
   
   const textPart = textPartValue(parts)
   const text = textPart?.text ?? ""
-  const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
 
   const { inline, images } = collectInlineParts(parts, {
