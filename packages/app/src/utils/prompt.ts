@@ -26,6 +26,35 @@ type Inline =
       name: string
     }
 
+/**
+* Extract prompt content from message parts for restoring into the prompt input.
+* This is used by undo to restore the original user prompt.
+*/
+export function extractPromptFromParts(parts: Part[], opts?: { directory?: string; attachmentName?: string }): Prompt {
+
+  const textPart = textPartValue(parts)
+  const text = textPart?.text ?? ""
+  const attachmentName = opts?.attachmentName ?? "attachment"
+
+  const { inline, images } = collectInlineParts(parts, {
+    directory: opts?.directory,
+    attachmentName,
+  })
+
+  // Construct the result prompt
+  let result: Prompt = []
+  result = reconstructPrompt(text, inline)
+
+  // If the result has nothing, say empty text is the default return.
+  if (result.length === 0) {
+    result.push({ type: "text", content: "", start: 0, end: 0 })
+  }
+
+  // If the result has nothing, append images
+  if (images.length === 0) return result
+  return [...result, ...images]
+}
+
 function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["selection"] {
   const queryIndex = url.indexOf("?")
   if (queryIndex === -1) return undefined
@@ -148,8 +177,7 @@ function collectAgentPart(agentPart: MessageAgentPart): Extract<Inline, { type: 
   }
 }
 
-// Finds an inline reference in the text, falling back to a search if its
-// original offsets no longer match.
+// Finds an inline reference in the text.
 function findInlineMatch(text: string, item: Inline, cursor: number) {
   if (item.start < 0 || item.end < item.start || !item.value) return undefined
   const mismatch = item.end > text.length || item.start < cursor || text.slice(item.start, item.end) !== item.value
@@ -164,7 +192,7 @@ function reconstructPrompt(text: string, inline: Inline[]):Prompt {
   let position = 0
   let cursor = 0
 
-// Helper to push prompt-class readable JSON onto the result
+
 const pushText = (content: string) => {
   if (!content) return
   result.push({
@@ -175,7 +203,7 @@ const pushText = (content: string) => {
   })
   position += content.length
 }
-// Helper to push prompt-class readable JSON onto the result
+
 const pushFile = (item: Extract<Inline, { type: "file" }>) => {
   const content = item.value
   const attachment: FileAttachmentPart = {
@@ -189,7 +217,7 @@ const pushFile = (item: Extract<Inline, { type: "file" }>) => {
   result.push(attachment)
   position += content.length
 }
-// Helper to push prompt-class readable JSON onto the result
+
 const pushAgent = (item: Extract<Inline, { type: "agent" }>) => {
   const content = item.value
   const mention: AgentPart = {
@@ -204,11 +232,11 @@ const pushAgent = (item: Extract<Inline, { type: "agent" }>) => {
 }
 
 for (const item of inline) {
-  // Find an Inline item
+
   const match = findInlineMatch(text, item, cursor)
   if (!match) continue
 
-  // Push all ordinary text before the item
+
   pushText(text.slice(cursor, match.start))
 
   if (item.type === "file") pushFile(item)
@@ -217,36 +245,9 @@ for (const item of inline) {
   cursor = match.end
 }
 
-// After all the inline objects are pushed, push the remaining text.
+
 pushText(text.slice(cursor))
 return result
 }
 
-/**
- * Extract prompt content from message parts for restoring into the prompt input.
- * This is used by undo to restore the original user prompt.
- */
-export function extractPromptFromParts(parts: Part[], opts?: { directory?: string; attachmentName?: string }): Prompt {
-  
-  const textPart = textPartValue(parts)
-  const text = textPart?.text ?? ""
-  const attachmentName = opts?.attachmentName ?? "attachment"
 
-  const { inline, images } = collectInlineParts(parts, {
-    directory: opts?.directory,
-    attachmentName,
-  })
-
-  // Construct the result prompt
-  let result: Prompt = []
-  result = reconstructPrompt(text, inline)
-
-  // If the result has nothing, say empty text is the default return.
-  if (result.length === 0) {
-    result.push({ type: "text", content: "", start: 0, end: 0 })
-  }
-
-  // If the result has nothing, append images
-  if (images.length === 0) return result
-  return [...result, ...images]
-}
